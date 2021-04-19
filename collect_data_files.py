@@ -3,15 +3,15 @@ from itertools import permutations
 
 import yaml
 
-def collect_data_files(direc, langs, suffix=None):
+def collect_data_files(direc, langs, suffix=None, prefix=None):
     directions = list(permutations(langs, 2))
     bases = set()
     for root, dirs, files in os.walk(direc):
         for filename in files:
             base, ext = os.path.splitext(filename)
-            if suffix and ext == suffix:
-                filename = base
-            elif suffix and not ext == suffix:
+            if prefix and not filename.startswith(prefix):
+                continue
+            if suffix and not filename.endswith(suffix):
                 continue
             bases.add(os.path.join(root, base))
 
@@ -38,7 +38,7 @@ def collect_data_files(direc, langs, suffix=None):
                 }
     return data
 
-def main(direc, outfp, langs, suffix=None):
+def main(direc, outfp, langs, suffix=None, prefix=None):
     data = {'data': collect_data_files(direc, langs, suffix=suffix)}
     with open(outfp, 'w', encoding='utf-8') as fh:
         yaml.dump(data, fh)

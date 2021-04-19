@@ -4,9 +4,11 @@ import os
 import shutil
 import subprocess
 import tempfile
+from urllib.request import urlopen
 from typing import *
 from functools import partial
 
+from tqdm import tqdm
 import fasttext
 
 FASTTEXT_MODEL_URL = "http://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin"

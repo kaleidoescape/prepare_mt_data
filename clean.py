@@ -286,3 +286,33 @@ def tagprotect(
         'src': src_outfp, 'tgt': tgt_outfp, 
         'src_repls': src_aux_outfp, 'tgt_repls': tgt_aux_outfp
     }
+
+def dedup(
+        src: str, tgt: str, output_dir: str, 
+        src_lang: str, tgt_lang: str, 
+        **kwargs
+    ) -> dict:
+    src_outfp = os.path.join(output_dir, os.path.basename(src)) + '.dedup'
+    tgt_outfp = os.path.join(output_dir, os.path.basename(tgt)) + '.dedup'
+
+    #avoid overwriting/redoing work
+    if os.path.exists(src_outfp) and os.path.exists(tgt_outfp):
+        logger.info(f"Skipping; files already exist: {src_outfp} {tgt_outfp}")
+        return {'src': src_outfp, 'tgt': tgt_outfp}
+
+    os.makedirs(output_dir, exist_ok=True)
+    tsv = os.path.join(output_dir, os.path.basename(src)) + '.tsv'
+    make_tsv(src, tgt, tsv)
+
+    out_tsv = os.path.join(output_dir, os.path.basename(src)) + '.tsv.dedup'
+    cmd = f"sort -u {tsv} -o {out_tsv}"
+    logger.info('RUNNING: ' + cmd)
+    subprocess.call(cmd, shell=True)
+
+    unmake_tsv(out_tsv, src_outfp, tgt_outfp)
+
+    #cleanup
+    os.remove(tsv)
+    os.remove(out_tsv)
+
+    return {'src': src_outfp, 'tgt': tgt_outfp}

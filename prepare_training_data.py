@@ -17,6 +17,7 @@ COMMANDS = {
     'charfix': clean.charfix,
     'bifix': clean.bifix,
     'biclean': clean.biclean,
+    'dedup': clean.dedup,
     'langcheck': clean.langcheck,
     'tagprotect': clean.tagprotect
 }
