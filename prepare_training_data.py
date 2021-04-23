@@ -12,18 +12,22 @@ import yaml
 from pydantic import BaseModel, validator
 
 import clean
+import create_queries
 
 COMMANDS = {
     'charfix': clean.charfix,
     'bifix': clean.bifix,
     'biclean': clean.biclean,
+    'dedup': clean.dedup,
     'langcheck': clean.langcheck,
-    'tagprotect': clean.tagprotect
+    'tagprotect': clean.tagprotect,
+    'queries': create_queries.create_queries,
 }
 
 #be explicit, so that logging occurs even if this is run as main
 logger = logging.getLogger('prepare_training_data')
 logger.setLevel(logging.INFO)
+
 
 class Formatter(
         argparse.ArgumentDefaultsHelpFormatter, 
