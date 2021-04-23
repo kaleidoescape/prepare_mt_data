@@ -12,6 +12,7 @@ from typing import *
 
 import fasttext_langid
 import retagger
+from edinmt.utils import get_file_length
 from parallely import pll_single, pll_multi
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -36,8 +37,7 @@ def unmake_tsv(tsv, src_fp, tgt_fp):
     return src_fp, tgt_fp
 
 def _charfix(infp, outfp):
-    chars = u"\u200c\x00".encode("utf8") #encode them first 
-    cmd = f'cat {infp} | sed -e "s/\r//g" | sed -e "s/[{chars}]//g" > {outfp}'
+    cmd = f'cat {infp} | sed -e "s/\r//g" > {outfp}'
     logger.info('RUNNING: ' + cmd)
     subprocess.call(cmd, shell=True)
     return outfp
@@ -182,7 +182,7 @@ def langcheck(
     return {'src': src_outfp, 'tgt': tgt_outfp, 'langids': aux_outfp}
 
 def _tagprotect(
-        input_fps: list, #make it a list of 1 just to use it in pll_multi
+        input_fps: list, #[src, tgt] 
         output_dir: str, 
         templates: list, 
         regex, 
@@ -190,18 +190,22 @@ def _tagprotect(
         dropout=0.1
     ) -> dict:
     r"""Replace URLs, emails, xml tags, etc. with tokens from templates."""
-    input_fp = input_fps[0] #a list of length 1 (for use w/ pll_multi)
+    length = get_file_length(input_fps[0])
 
-    output_fp = os.path.join(
-        output_dir, os.path.basename(input_fp)) + '.tagprotect'
-    repls_fp = output_fp + '.tag_repls'
-    with open(input_fp, 'r', encoding='utf-8') as infile, \
-            open(output_fp, 'w', encoding='utf-8') as outfile, \
-            open(repls_fp, 'w', encoding='utf-8') as repls_fh:
-        for line in infile:
+    output_fps = [os.path.join(output_dir, os.path.basename(fp) + '.tagprotect')
+              for fp in input_fps]
+    repls_fp = os.path.join(output_dir, os.path.basename(input_fps[0])) + '.tagprotect.repls'
+
+    input_fhs = [open(fp, 'r', encoding='utf-8') for fp in input_fps]
+    output_fhs = [open(fp, 'w', encoding='utf-8') for fp in output_fps]
+
+    with open(repls_fp, 'w', encoding='utf-8') as repls_fh:
+        for i in range(length):
+            lines = [fh.readline().strip() for fh in input_fhs]
             repls = []
-            line = line.strip()
-            matches = re.findall(regex, line)
+            #search in the src side; assume the tgt side has it
+            #(if it doesn't, we'll just end up skipping the replacement)
+            matches = re.findall(regex, lines[0])
             for i, match in enumerate(matches):
                 if len(matches) == 1:
                     c = random.randrange(0, max_id)
@@ -212,13 +216,20 @@ def _tagprotect(
                 for j, extraction in enumerate(match):
                     if extraction and random.uniform(0,1) > dropout:
                         repl = templates[j].format(c)
-                        line = line.replace(extraction, repl, 1)
+                        lines = [line.replace(extraction, repl, 1) for line in lines]
                         repls.append([repl, extraction])
-            repls_json = json.dumps(repls, ensure_ascii=False)
 
-            repls_fh.write(repls_json + os.linesep)
-            outfile.write(line + os.linesep)
-    return [output_fp, repls_fp]
+            repls_json = json.dumps(repls, ensure_ascii=False)
+            repls_fh.write(repls_json + '\n')
+
+            [output_fhs[i].write(line + '\n') for i, line in enumerate(lines)]
+    
+    [fh.close() for fh in input_fhs]
+    [fh.close() for fh in output_fhs]
+
+    output_fps.append(repls_fp) #return a single list for use with pll_multi
+    return output_fps
+
 
 def tagprotect(
         src: str, tgt: str, output_dir: str, 
@@ -226,23 +237,20 @@ def tagprotect(
         max_id=11, dropout=0.1, **kwargs
     ) -> dict:
     r"""Replace URLs, emails, xml tags, etc. with tokens from templates."""
-    src_outfp = os.path.join(output_dir, os.path.basename(src)) + '.tagprotect'
-    tgt_outfp = os.path.join(output_dir, os.path.basename(tgt)) + '.tagprotect'
-    src_aux_outfp = os.path.join(output_dir, os.path.basename(src)) + '.tagprotect_repls'
-    tgt_aux_outfp = os.path.join(output_dir, os.path.basename(tgt)) + '.tagprotect_repls'
+    src_name = os.path.basename(src)
+    tgt_name = os.path.basename(tgt)
+    src_outfp = os.path.join(output_dir, src_name) + '.tagprotect'
+    tgt_outfp = os.path.join(output_dir, tgt_name) + '.tagprotect'
+    aux_outfp = os.path.join(output_dir, src_name) + '.tagprotect_repls'
 
     #avoid overwriting/redoing work
     if (
         os.path.exists(src_outfp) and 
         os.path.exists(tgt_outfp) and 
-        os.path.exists(src_aux_outfp) and
-        os.path.exists(tgt_aux_outfp) 
+        os.path.exists(aux_outfp) 
     ):
-        logger.info(f"Skipping; files already exist: {src_outfp} {tgt_outfp}")
-        return {
-            'src': src_outfp, 'tgt': tgt_outfp, 
-            'src_repls': src_aux_outfp, 'tgt_repls': tgt_aux_outfp
-        }
+        logger.info(f"Skipping; files already exist: {src_outfp} {tgt_outfp} {aux_outfp}")
+        return {'src': src_outfp, 'tgt': tgt_outfp, 'repls': aux_outfp}
 
     #parallel process the two files using _tagprotect
     part = partial(
@@ -253,36 +261,47 @@ def tagprotect(
         max_id=max_id, 
         dropout=dropout,
     )
-    src_fp, src_repls_fp = pll_multi(
-        [src], 
+    src_fp, tgt_fp, repls_fp = pll_multi(
+        [src, tgt], 
         part, 
         n_jobs=CPU_COUNT, 
         outdir=output_dir, 
-        output_name=os.path.basename(src) + '.tagprotect'
-    )
-    part = partial(
-        _tagprotect,
-        output_dir=output_dir,
-        templates=retagger.TEMPL, 
-        regex=retagger.REGEX,
-        max_id=max_id, 
-        dropout=dropout,
-    )
-    tgt_fp, tgt_repls_fp = pll_multi(
-        [tgt], 
-        part, 
-        n_jobs=CPU_COUNT, 
-        outdir=output_dir, 
-        output_name=os.path.basename(tgt) + '.tagprotect'
+        output_name=src_name + '.tagprotect'
     )
 
     #rename files so they have predictable/consistent naming
     shutil.move(src_fp, src_outfp)
     shutil.move(tgt_fp, tgt_outfp)
-    shutil.move(src_repls_fp, src_aux_outfp)
-    shutil.move(tgt_repls_fp, tgt_aux_outfp)
+    shutil.move(repls_fp, aux_outfp)
 
-    return {
-        'src': src_outfp, 'tgt': tgt_outfp, 
-        'src_repls': src_aux_outfp, 'tgt_repls': tgt_aux_outfp
-    }
+    return {'src': src_outfp, 'tgt': tgt_outfp, 'repls': aux_outfp}
+
+def dedup(
+        src: str, tgt: str, output_dir: str, 
+        src_lang: str, tgt_lang: str, 
+        **kwargs
+    ) -> dict:
+    src_outfp = os.path.join(output_dir, os.path.basename(src)) + '.dedup'
+    tgt_outfp = os.path.join(output_dir, os.path.basename(tgt)) + '.dedup'
+
+    #avoid overwriting/redoing work
+    if os.path.exists(src_outfp) and os.path.exists(tgt_outfp):
+        logger.info(f"Skipping; files already exist: {src_outfp} {tgt_outfp}")
+        return {'src': src_outfp, 'tgt': tgt_outfp}
+
+    os.makedirs(output_dir, exist_ok=True)
+    tsv = os.path.join(output_dir, os.path.basename(src)) + '.tsv'
+    make_tsv(src, tgt, tsv)
+
+    out_tsv = os.path.join(output_dir, os.path.basename(src)) + '.tsv.dedup'
+    cmd = f"sort -u {tsv} -o {out_tsv}"
+    logger.info('RUNNING: ' + cmd)
+    subprocess.call(cmd, shell=True)
+
+    unmake_tsv(out_tsv, src_outfp, tgt_outfp)
+
+    #cleanup
+    os.remove(tsv)
+    os.remove(out_tsv)
+
+    return {'src': src_outfp, 'tgt': tgt_outfp}
