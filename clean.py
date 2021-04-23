@@ -276,6 +276,7 @@ def tagprotect(
 
     return {'src': src_outfp, 'tgt': tgt_outfp, 'repls': aux_outfp}
 
+
 def dedup(
         src: str, tgt: str, output_dir: str, 
         src_lang: str, tgt_lang: str, 
