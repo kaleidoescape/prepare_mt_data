@@ -13,6 +13,7 @@ from pydantic import BaseModel, validator
 
 import clean
 import create_queries
+import utils
 
 COMMANDS = {
     'charfix': clean.charfix,
@@ -27,34 +28,6 @@ COMMANDS = {
 #be explicit, so that logging occurs even if this is run as main
 logger = logging.getLogger('prepare_training_data')
 logger.setLevel(logging.INFO)
-
-
-class Formatter(
-        argparse.ArgumentDefaultsHelpFormatter, 
-        argparse.RawDescriptionHelpFormatter
-    ): 
-    r"""Format help text in the arg parser in a prettier way."""
-    pass
-
-class Dataset(BaseModel):
-    r"""A data set field from the config file."""
-    src_lang: str
-    tgt_lang: str
-    src: str 
-    tgt: str 
-
-    @validator('src', 'tgt')
-    def valid_file(cls, data):
-        if data and not os.path.exists(data): 
-            raise FileNotFoundError(f"File not found: {data}")
-        if data and os.stat(data).st_size == 0:
-            raise OSError(f"File empty: {data}")
-        return data
-
-class ConfigArgs(BaseModel):
-    r"""The fields from the config file."""
-    data: Dict[str, Dataset]
-    args: Optional[dict]={}
 
 
 def main(
@@ -118,19 +91,6 @@ def main(
 
     return results_fp
 
-def update_dict_recursively(d, u):
-    r"""
-    Normal dict.update() results in nested dicts being overwritten wholesale.
-    We need to update the keys inside of the nested dicts as well. 
-    """
-    #https://stackoverflow.com/a/3233356
-    for k, v in u.items():
-        if isinstance(v, collections.abc.Mapping):
-            d[k] = update_dict_recursively(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
-
 def parse_args():
     epilog = textwrap.dedent(f"""
     Example config.yml:
@@ -161,21 +121,7 @@ def parse_args():
     
     logger.info(f"Using {args.command} with {args.configs} in {args.outdir}...")
 
-    #make backups of the config files in the outdir
-    os.makedirs(args.outdir, exist_ok=True)
-    pconfig = {}
-    for config in args.configs:
-        config_bck = os.path.join(args.outdir, os.path.basename(config)) 
-        os.makedirs(os.path.dirname(config_bck), exist_ok=True)
-        if not os.path.exists(config_bck):
-            shutil.copyfile(config, config_bck)
-        with open(config, 'r', encoding='utf-8') as infile:
-            c = yaml.safe_load(infile)
-            pconfig = update_dict_recursively(pconfig, c)
-    with open(os.path.join(args.outdir, 'config.last_input.yml'), 'w', encoding='utf-8') as outfile:
-        yaml.dump(pconfig, outfile)
-
-    args.config = ConfigArgs.parse_obj(pconfig)
+    args.config = utils.parse_configs(configs, args.outdir)
     return args
 
 if __name__ == '__main__':
