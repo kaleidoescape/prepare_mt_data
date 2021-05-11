@@ -4,7 +4,7 @@ from itertools import permutations
 
 import yaml
 
-def collect_data_files(direc, langs, suffix=None, prefix=None, ordered=False):
+def collect_data_files(direc, langs, suffix=None, prefix=None, ordered=None):
     directions = list(permutations(langs, 2))
     bases = set()
     for root, dirs, files in os.walk(direc):
@@ -23,13 +23,22 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, ordered=False):
             tgt_lang = direction[1]
             src_fp = os.path.join(base + f'.{src_lang}')
             tgt_fp = os.path.join(base + f'.{tgt_lang}')
-            if ordered:
-                src_search = f"\W{src_lang}\W{tgt_lang}\.{src_lang}"
-                tgt_search = f"\W{src_lang}\W{tgt_lang}\.{tgt_lang}"
+
+            if ordered == 'forward':
+                src_search = f"\W{src_lang}\W{tgt_lang}\W.*\.{src_lang}"
+                tgt_search = f"\W{src_lang}\W{tgt_lang}\W.*\.{tgt_lang}"
                 src_matches = re.search(src_search, src_fp)
                 tgt_matches = re.search(tgt_search, tgt_fp)
                 if not src_matches or not tgt_matches:
                     continue
+            elif ordered == 'backward':
+                src_search = f"\W{src_lang}\W{tgt_lang}\W.*\.{tgt_lang}"
+                tgt_search = f"\W{src_lang}\W{tgt_lang}\W.*\.{src_lang}"
+                src_matches = re.search(src_search, src_fp)
+                tgt_matches = re.search(tgt_search, tgt_fp)
+                if not src_matches or not tgt_matches:
+                    continue
+
             if suffix:
                 src_fp = src_fp + suffix
                 tgt_fp = tgt_fp + suffix
@@ -54,9 +63,12 @@ def main(direc, outfp, langs, suffix=None, prefix=None, ordered=False):
         langs: list of language suffixes to search for
         suffix: all files must have this immediately after the lang suffix
         prefix: all files must start with this 
-        ordered: the list of langs is ordered so files must use a naming
-            scheme where src comes first, such as [src-tgt.src, src-tgt.tgt]
-            (i.e. [tgt-src.src, tgt-src.tgt] will NOT be accepted)
+        ordered: [None, forward, backward]: the list of langs is ordered so 
+            files must use a specific naming scheme; for 'forward', src must
+            come first, such as [src-tgt.src, src-tgt.tgt]
+            (i.e. [tgt-src.src, tgt-src.tgt] will NOT be accepted);
+            for 'backward' the opposite is true; 
+            None means either is accepted
 
     """
     data = {'data': collect_data_files(direc, langs, suffix=suffix, prefix=prefix, ordered=ordered)}
