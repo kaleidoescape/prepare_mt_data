@@ -1,3 +1,5 @@
+#!/usr/bin/env python3.7
+# -*- coding: utf-8 -*
 import json
 import logging
 import math
@@ -12,7 +14,7 @@ from typing import *
 
 import fasttext_langid
 import retagger
-from edinmt.utils import get_file_length
+from utils import get_file_length
 from parallely import pll_single, pll_multi
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))

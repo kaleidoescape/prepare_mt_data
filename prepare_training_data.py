@@ -35,6 +35,7 @@ def main(
         outdir: str,
         command: str,
         name: Optional[str]='',
+        no_empty: Optional[bool]=False,
     ):
     r"""
     Preprocess training data with a text processor.
@@ -65,15 +66,24 @@ def main(
     for k in pconfig.data:
         this_outdir = os.path.join(outdir, k)
 
-        os.makedirs(this_outdir, exist_ok=True)
         src_lang, tgt_lang = pconfig.data[k].src_lang, pconfig.data[k].tgt_lang
         src_data, tgt_data = pconfig.data[k].src, pconfig.data[k].tgt
-        src_data_out = os.path.join(this_outdir, os.path.basename(src_data))
+
+        if os.stat(src_data).st_size == 0 or os.stat(tgt_data).st_size == 0 and not no_empty:
+            logger.warning(f"WARNING! Skipping empty dataset: {k}")
+            continue
+        if os.stat(src_data).st_size == 0 or os.stat(tgt_data).st_size == 0 and no_empty:
+            raise OSError(f"File(s) empty: {src_data} {tgt_data}")
+
         logger.info(f"Processing {name} {k} in {this_outdir}...")
+
+        os.makedirs(this_outdir, exist_ok=True)
+        src_data_out = os.path.join(this_outdir, os.path.basename(src_data))
 
         func_args = pconfig.data[k].dict()
         func_args.update(**pconfig.args)
         func_args['output_dir'] = this_outdir
+        
         outputs = func(**func_args)
 
         results['data'][k] = {
@@ -116,6 +126,8 @@ def parse_args():
         help='the name of the text processor to use')
     parser.add_argument('--name', default='results', 
         help="optional name for results file prefix")
+    parser.add_argument('--no-empty', action="store_true", default=False, 
+        help="disallow empty files and raise an error if you try to process one (default: skip empty datasets)")
     args, rest = parser.parse_known_args()
     args.rest = rest 
     
@@ -131,4 +143,5 @@ if __name__ == '__main__':
         outdir=args.outdir,
         command=args.command,
         name=args.name,
+        no_empty=args.no_empty,
     )
