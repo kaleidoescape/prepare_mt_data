@@ -31,7 +31,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(
-        pconfig: str,
+        pconfig: dict,
         outdir: str,
         command: str,
         name: Optional[str]='',
@@ -63,11 +63,11 @@ def main(
     func = COMMANDS[command]
 
     results = {'data': {}}
-    for k in pconfig.data:
+    for k in pconfig['data']:
         this_outdir = os.path.join(outdir, k)
 
-        src_lang, tgt_lang = pconfig.data[k].src_lang, pconfig.data[k].tgt_lang
-        src_data, tgt_data = pconfig.data[k].src, pconfig.data[k].tgt
+        src_lang, tgt_lang = pconfig['data'][k]['src_lang'], pconfig['data'][k]['tgt_lang']
+        src_data, tgt_data = pconfig['data'][k]['src'], pconfig['data'][k]['tgt']
 
         if os.stat(src_data).st_size == 0 or os.stat(tgt_data).st_size == 0 and not no_empty:
             logger.warning(f"WARNING! Skipping empty dataset: {k}")
@@ -80,8 +80,8 @@ def main(
         os.makedirs(this_outdir, exist_ok=True)
         src_data_out = os.path.join(this_outdir, os.path.basename(src_data))
 
-        func_args = pconfig.data[k].dict()
-        func_args.update(**pconfig.args)
+        func_args = pconfig['data'][k]
+        func_args.update(**pconfig['args'])
         func_args['output_dir'] = this_outdir
         
         outputs = func(**func_args)
@@ -114,7 +114,7 @@ def parse_args():
     """)
     
     parser = argparse.ArgumentParser(
-        formatter_class=Formatter,
+        formatter_class=utils.ArgParseHelpFormatter,
         description="Generate data using the requested text processors for source and target.",
         epilog=epilog
     )
@@ -133,7 +133,7 @@ def parse_args():
     
     logger.info(f"Using {args.command} with {args.configs} in {args.outdir}...")
 
-    args.config = utils.parse_configs(configs, args.outdir)
+    args.config = utils.parse_configs(args.configs, args.outdir)
     return args
 
 if __name__ == '__main__':
