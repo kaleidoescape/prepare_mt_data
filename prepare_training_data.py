@@ -1,15 +1,10 @@
 import argparse
-import collections.abc
-import json
 import logging
 import os
-import shutil
-import subprocess
 import textwrap
 from typing import *
 
 import yaml
-from pydantic import BaseModel, validator
 
 import clean
 import create_queries
@@ -121,7 +116,7 @@ def parse_args():
     parser.add_argument('--configs', nargs='+', required=True,
         help='path to yaml config file(s) with source/target data (later override earlier)')
     parser.add_argument('--outdir', required=True,
-        help="output directory where to save the evaluation results directory")
+        help="output directory where to save results")
     parser.add_argument('--command', choices=list(COMMANDS.keys()), required=True,
         help='the name of the text processor to use')
     parser.add_argument('--name', default='results', 
