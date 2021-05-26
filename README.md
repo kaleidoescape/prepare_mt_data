@@ -32,17 +32,9 @@ python scripts/collect_data_files.py \
     "['is', 'nb', 'sv', 'da', 'en', 'de']"
 ```
 
-The `prepare_training_data.py` script can use the resulting config with different commands to perform the following cleaning steps, and write out the newly cleaned filepaths to a new config that can be used in subsequent steps.
+The `prepare_training_data.py` script can use the resulting config with different commands to perform cleaning steps (see below), and write out the newly cleaned filepaths to a new config that can be used in subsequent steps.
 
-Multiple configs can be used (later configs override earlier configs). This can be taken advantage of for those steps that may require additional arguments. For example, the language identification step (see below) can uses language id aliases as an argument. This can be places in a separate config for more flexibility in the dataset definition config. For example, `config.langid_aliases.yml`:
-
-```
-args:
-  aliases:
-    nb:
-      - "no"
-      - "nb"
-```
+Multiple configs can be used (later configs override earlier configs). This can be taken advantage of for those steps that may require additional arguments. For example, the language identification step (see below) can use language id aliases as an argument, which can be placed in a separate config for more flexibility. 
 
 ## Cleaning Steps
 
@@ -90,7 +82,15 @@ python ./scripts/prepare_training_data.py \
     --name data
 ```
 
-The langcheck step uses fastText to extract only the target languages from the datasets:
+The langcheck step uses fastText to extract only the target languages from the datasets. It can take additional arguments for language id aliases. For example, the following `config.langid_aliases.yml` allows the `nb` language to be identified as either `nb` or `no` (this is necessary for `nb` because fastText's model only has `no` and it will delete too many correct sentences otherwise):
+
+```
+args:
+  aliases:
+    nb:
+      - "no"
+      - "nb"
+```
 
 ```
 python ./scripts/prepare_training_data.py \
@@ -100,7 +100,7 @@ python ./scripts/prepare_training_data.py \
     --name data
 ```
 
-The tagprotect step replaces emails, urls, and xml tags with special tokens. It creates parallel `.repl` files that contain a json list of replacements created on each line, so that the replacements can later be re-inserted:
+The tagprotect step replaces emails, urls, and xml tags with special tokens. It creates parallel `.repls` files that contain a json list of replacements for each each line, so that the replacements can later be re-inserted:
 
 ```
 python ./scripts/prepare_training_data.py \
