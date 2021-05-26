@@ -54,13 +54,14 @@ def update_dict_recursively(d, u):
     return d
 
 def parse_configs(configs, outdir=None):
-    os.makedirs(outdir, exist_ok=True)
     pconfig = {}
     for config in configs:
-        config_bck = os.path.join(outdir, os.path.basename(config)) 
-        os.makedirs(os.path.dirname(config_bck), exist_ok=True)
-        if not os.path.exists(config_bck):
-            shutil.copyfile(config, config_bck)
+        if outdir:
+            os.makedirs(outdir, exist_ok=True)
+            config_bck = os.path.join(outdir, os.path.basename(config)) 
+            os.makedirs(os.path.dirname(config_bck), exist_ok=True)
+            if not os.path.exists(config_bck):
+                shutil.copyfile(config, config_bck)
         with open(config, 'r', encoding='utf-8') as infile:
             c = yaml.safe_load(infile)
             pconfig = update_dict_recursively(pconfig, c)
