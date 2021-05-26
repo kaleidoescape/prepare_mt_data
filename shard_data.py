@@ -73,6 +73,7 @@ def main(pconfig, outdir, min_n_shards=1, replicate=True):
     they're missing from (their shards will be looped over for replication, e.g.
     shard 0 gets copied into the first shard the small data is missing from,
     shard 1 into the next shard it's missing from, etc.).
+    Motivation for replication (end of section 2): https://arxiv.org/abs/2010.11125
     """
     line_counts = {}
     for k in pconfig['data']:
