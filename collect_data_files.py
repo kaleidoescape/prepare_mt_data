@@ -9,11 +9,15 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, ordered=None):
     bases = set()
     for root, dirs, files in os.walk(direc):
         for filename in files:
-            base, ext = os.path.splitext(filename)
             if prefix and not filename.startswith(prefix):
                 continue
             if suffix and not filename.endswith(suffix):
                 continue
+            elif suffix:
+                base = filename.replace(suffix, '')
+            else:
+                base = filename
+            base, ext = os.path.splitext(base)
             bases.add(os.path.join(root, base))
     
     data = {}
@@ -42,6 +46,7 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, ordered=None):
             if suffix:
                 src_fp = src_fp + suffix
                 tgt_fp = tgt_fp + suffix
+
             if os.path.exists(src_fp) and os.path.exists(tgt_fp):
                 #try to simplify the name for reader's ease
                 dataset_name, ext = os.path.splitext(base)
