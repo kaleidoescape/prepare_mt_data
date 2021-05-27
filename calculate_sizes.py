@@ -30,17 +30,21 @@ def calculate_sizes(data):
         if src_data not in lengths or tgt_data not in lengths:
             length = utils.get_file_length(src_data)
             #save time counting by assuming src_length==tgt_length
-            lengths[src_data] = lengths[tgt_data] = length
+            lengths[src_data] = length
+            lengths[tgt_data] = length
         else: #don't waste time recounting reverse-direction datasets
             length = lengths[src_data]
         src_idx, tgt_idx = langs.index(src_lang), langs.index(tgt_lang)
         A[src_idx, tgt_idx] += length
 
+        logger.info(f"{src_data} : {length}")
+    
     return A, langs
 
 def main(pconfig, csv_file):
     r"""Create a csv file of parallel data counts."""
     A, langs = calculate_sizes(pconfig['data'])
+    logger.info(f"TOTAL: {np.sum(A)}")
     np.savetxt(csv_file, A, delimiter=",", header=",".join(langs), fmt='%f')
     
 
