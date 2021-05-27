@@ -8,7 +8,18 @@ import utils
 
 logger = utils.setup_logger('collect_data_files')
 
-def collect_data_files(direc, langs, suffix=None, prefix=None, exclude=None, require=None, ordered=None):
+def collect_data_files(
+        direc: str, 
+        langs: list, 
+        suffix: Optional[str]=None, 
+        prefix: Optional[str]=None, 
+        exclude: Optional[list]=None, 
+        require: Optional[list]=None, 
+        ordered: Optional[str]=None, #{None, forward, backward}
+        unique: Optional[bool]=True
+    ):
+    assert ordered in [None, False, 'forward', 'backward']
+
     directions = list(permutations(langs, 2))
     bases = set()
     for root, dirs, files in os.walk(direc):
@@ -26,6 +37,7 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, exclude=None, req
             bases.add(base)
     
     data = {}
+    seen = set()
     for direction in directions:
         for base in bases:
             src_lang = direction[0]
@@ -62,6 +74,7 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, exclude=None, req
             if not (exclude_ok and require_ok):
                 continue
 
+
             if os.path.exists(src_fp) and os.path.exists(tgt_fp):
                 #try to simplify the name for reader's ease
                 dataset_name, ext = os.path.splitext(base)
@@ -69,6 +82,13 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, exclude=None, req
                 name = name.replace('/', '-')
                 k = f"{src_lang}2{tgt_lang}_{name}"
                 #logger.info(f"Adding: {src_fp} {k}")
+
+                src_name = os.path.basename(src_fp)
+                tgt_name = os.path.basename(tgt_fp)
+                if unique and src_name in seen and tgt_name in seen:
+                    continue
+                seen.add(src_name)
+                seen.add(tgt_name)
 
                 data[k] = {
                     'src_lang': src_lang,
@@ -78,7 +98,17 @@ def collect_data_files(direc, langs, suffix=None, prefix=None, exclude=None, req
                 }
     return data
 
-def main(direc, outfp, langs, suffix=None, prefix=None, exclude=None, require=None, ordered=None):
+def main(
+        direc, 
+        outfp, 
+        langs, 
+        suffix=None, 
+        prefix=None, 
+        exclude=None, 
+        require=None, 
+        ordered=None, 
+        unique=True
+    ):
     r"""
     Args:
         direc: directory to search through for files
@@ -87,9 +117,11 @@ def main(direc, outfp, langs, suffix=None, prefix=None, exclude=None, require=No
         suffix: all files must have this immediately after the lang suffix
         prefix: all files must start with this 
         exclude: no file may have any one of these strings
-        ordered: [None, forward, backward]: the list of langs is ordered 
+        ordered: {None, forward, backward}: the list of langs is ordered 
             and we do not add the opposite direction to the config file
             (None means we add both directions into the config file)
+        unique: don't use the same base filename twice, to prevent creating
+            mirrored backwards directions when the file has already been used
 
     """
     data = {'data': 
@@ -101,6 +133,7 @@ def main(direc, outfp, langs, suffix=None, prefix=None, exclude=None, require=No
             exclude=exclude,
             require=require, 
             ordered=ordered,
+            unique=unique,
         )
     }
     with open(outfp, 'w', encoding='utf-8') as fh:
