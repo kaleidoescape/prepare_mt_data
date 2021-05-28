@@ -32,9 +32,9 @@ def main(
         pconfig: str,
         outdir: str,
         n: int,
-        sampling_method: str, 
+        sampling_method: Optional[str]='uniform', 
         temperature: Optional[float]=5,
-        dataset_sampling_method: str, 
+        dataset_sampling_method: Optional[str]='uniform', 
         dataset_temperature: Optional[float]=5,
     ):
     r"""
@@ -186,7 +186,7 @@ def parse_args():
         help="output directory where to save results")
     parser.add_argument('--n', required=True, type=int,
         help="the number of new sentences to sample")
-    parser.add_argument('--sampling-method', required=True, choices=['temperature', 'uniform', 'orig'],
+    parser.add_argument('--sampling-method', default='uniform', choices=['temperature', 'uniform', 'orig'],
         help="the sampling method to use for sampling from the language distribution")
     parser.add_argument('--temperature', default=5.0, type=float,
         help="only applicable in case sampling-method==temperature; temperature sampling parameter T for sampling a language; new distribution will be (sizes ** (1/T) / sum(sizes ** (1/T))")
@@ -206,6 +206,8 @@ if __name__ == '__main__':
         args.config,
         outdir=args.outdir,
         n=args.n,
+        sampling_method=args.sampling_method,
         temperature=args.temperature,
+        dataset_sampling_method=args.dataset_sampling_method,
         dataset_temperature=args.dataset_temperature,
     )

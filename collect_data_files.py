@@ -1,6 +1,8 @@
 import os
 import re
 from itertools import permutations
+from typing import *
+from typing import IO #the star doesn't pick this one up
 
 import yaml
 
