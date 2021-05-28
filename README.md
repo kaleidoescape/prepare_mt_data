@@ -138,4 +138,18 @@ We use [fastText](https://fasttext.cc/docs/en/crawl-vectors.html) pre-trained wo
   booktitle={Proceedings of the International Conference on Language Resources and Evaluation (LREC 2018)},
   year={2018}
 }
+
+@article{joulin2016bag,
+    title={Bag of Tricks for Efficient Text Classification},
+    author={Joulin, Armand and Grave, Edouard and Bojanowski, Piotr and Mikolov, Tomas},
+    journal={arXiv preprint arXiv:1607.01759},
+    year={2016}
+}
+
+@article{joulin2016fasttext,
+    title={FastText.zip: Compressing text classification models},
+    author={Joulin, Armand and Grave, Edouard and Bojanowski, Piotr and Douze, Matthijs and J{\'e}gou, H{\'e}rve and Mikolov, Tomas},
+    journal={arXiv preprint arXiv:1612.03651},
+    year={2016}
+}
 ```
