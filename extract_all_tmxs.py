@@ -6,15 +6,14 @@ xx and yy are languages from the list of langs.
 import os
 from itertools import permutations
 
-#hack to import sister modules
-#https://stackoverflow.com/a/6466139/2184303
-from sys import path
-path.append(os.path.dirname(path[0]))
-__package__ = "examples"
+import xml.etree.ElementTree
 
 import extractors
+import utils
 
-def extract_tmxs(indir, outdir, langs):
+logger = utils.setup_logger('extract_all_tmxs')
+
+def extract_tmxs(indir, outdir, langs, skip_tmx_parse_errors=True):
     extracted = []
     skipped = []
     directions = list(permutations(langs, 2))
@@ -39,10 +38,19 @@ def extract_tmxs(indir, outdir, langs):
                         os.path.exists(outname + f'.{direction[0]}') and
                         os.path.exists(outname + f'.{direction[1]}') 
                     ):
-                        print(f"Skipping existing corpus: {outname}")
+                        logger.info(f"Skipping existing corpus: {outname}")
                         continue
-                    print(f"Extracting {fp}")
-                    extractors.extract_tmx(fp, outname, direction[0], direction[1])
+                    logger.info(f"Extracting {fp}")
+
+                    try:
+                        extractors.extract_tmx(fp, outname, direction[0], direction[1])
+                    except xml.etree.ElementTree.ParseError as e:
+                        logger.warning(f'ERROR PARSING {fp}: {e}')
+                        if not skip_tmx_parse_errors:
+                            raise
+                        else:
+                            continue
+                    
                     extracted.append(fp)
                     done = True
             if not done:
