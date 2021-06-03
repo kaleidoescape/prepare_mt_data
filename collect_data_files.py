@@ -76,7 +76,6 @@ def collect_data_files(
             if not (exclude_ok and require_ok):
                 continue
 
-
             if os.path.exists(src_fp) and os.path.exists(tgt_fp):
                 #try to simplify the name for reader's ease
                 dataset_name, ext = os.path.splitext(base)

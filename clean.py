@@ -188,7 +188,7 @@ def _tagprotect(
         output_dir: str, 
         templates: list, 
         regex, 
-        max_id=11, 
+        max_id=5, 
         dropout=0.1
     ) -> dict:
     r"""Replace URLs, emails, xml tags, etc. with tokens from templates."""
@@ -236,7 +236,7 @@ def _tagprotect(
 def tagprotect(
         src: str, tgt: str, output_dir: str, 
         src_lang: str, tgt_lang: str, 
-        max_id=11, dropout=0.1, **kwargs
+        max_id=5, dropout=0.1, **kwargs
     ) -> dict:
     r"""Replace URLs, emails, xml tags, etc. with tokens from templates."""
     src_name = os.path.basename(src)
