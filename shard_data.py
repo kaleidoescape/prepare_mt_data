@@ -23,47 +23,48 @@ def shard_data_n_shards(fp, outdir, n_shards=1, length=None):
         length = utils.get_file_length(fp)
     if n_shards == 1:
         lines_per_shard = length
-    lines_per_shard = length // (n_shards - 1)
-    if lines_per_shard == 0:
-        lines_per_shard = length
-    extras = length % (n_shards - 1)
+    else:
+        lines_per_shard = length // n_shards
+    extras = length % n_shards
 
     name = os.path.basename(fp)
-    logger.info(f"{name}: shards 1 to {n_shards-1}: {lines_per_shard} lines, shard {n_shards}: {extras} lines")
+    logger.info(f"{name}: creating {n_shards} shards: {lines_per_shard} per shard, +last {extras} lines spread around (total data: {length})")
 
-    [os.makedirs(os.path.join(outdir, f"{i:03d}"), exist_ok=True) for i in range(1, n_shards)]
-    shard_fps = [os.path.join(outdir, f"{i:03d}", name) for i in range(1, n_shards)]
-    if extras:
-        os.makedirs(os.path.join(outdir, f"{len(shard_fps)+1:03d}"), exist_ok=True)
-        shard_fps.append(os.path.join(outdir, f"{len(shard_fps)+1:03d}", name)) 
+    [os.makedirs(os.path.join(outdir, f"{i:03d}"), exist_ok=True) for i in range(1, n_shards+1)]
+    shard_fps = [os.path.join(outdir, f"{i:03d}", name) for i in range(1, n_shards+1)]
     shard_fhs = [open(fp, 'wb') for fp in shard_fps]
     
     with open(fp, 'rb') as infh:
-        for shard in range(1, n_shards+1): 
-            if shard != n_shards:
-                for i in range(lines_per_shard):
-                    line = infh.readline()
-                    shard_fhs[shard-1].write(line)
-            elif extras:
-                for i in range(extras):
-                    line = infh.readline()
-                    shard_fhs[shard-1].write(line)
-            else: 
-                n_shards = n_shards - 1
+        for shard in range(n_shards): 
+            for i in range(lines_per_shard):
+                line = infh.readline()
+                shard_fhs[shard].write(line)
+        j = 0
+        for i in range(extras):
+            line = infh.readline()
+            shard_fhs[j].write(line)
+            j += 1
+            if j == n_shards:
+                j = 0
+
     return n_shards
 
-def shard_data_n_lines(fp, outdir, n_lines=100000, length=None):
+def shard_data_n_lines(fp, outdir, n_lines=100000, max_n_shards=10, length=None):
     r"""
     Split fp into shards, where each shard has n_lines
     (except last, small shard, which has the remainder).
     """
     if length is None:
         length = utils.get_file_length(fp)
-    n_shards = (length // n_lines) + 1
+    n_shards = (length // n_lines)
+    if n_shards == 0:
+        n_shards = 1
+    if n_shards > max_n_shards:
+        n_shards = max_n_shards
     n_shards = shard_data_n_shards(fp, outdir, n_shards=n_shards, length=length)
     return n_shards
 
-def main(pconfig, outdir, min_n_shards=1, replicate=True):
+def main(pconfig, outdir, min_n_shards=1, max_n_shards=10, replicate=True):
     r"""
     Split data into shard folders in the outdir. The smallest dataset will be
     split into min_n_shards. Bigger datasets will be split so each of their 
@@ -80,6 +81,9 @@ def main(pconfig, outdir, min_n_shards=1, replicate=True):
         src_lang, tgt_lang = pconfig['data'][k]['src_lang'], pconfig['data'][k]['tgt_lang']
         src_data, tgt_data = pconfig['data'][k]['src'], pconfig['data'][k]['tgt']
         length = utils.get_file_length(src_data)
+        if length == 0:
+            logger.warning(f"Skipping sharding empty dataset: {k}")
+            continue
         if src_data and os.path.exists(src_data):
             line_counts[src_data] = length
         if tgt_data and os.path.exists(tgt_data) and tgt_data not in line_counts:
@@ -89,7 +93,7 @@ def main(pconfig, outdir, min_n_shards=1, replicate=True):
 
     sharded = {}
     for fp in list(line_counts.keys()): 
-        n = shard_data_n_lines(fp, outdir, min_size, line_counts[fp])
+        n = shard_data_n_lines(fp, outdir, min_size, max_n_shards, line_counts[fp])
         sharded[fp] = n
 
     max_shard_id = np.max(list(sharded.values()))
@@ -101,6 +105,7 @@ def main(pconfig, outdir, min_n_shards=1, replicate=True):
             while current < max_shard_id:
                 src = os.path.join(outdir, f"{shifting:03d}", name)
                 dst = os.path.join(outdir, f"{current+1:03d}", name)
+                logger.info(f"Replicating {src} to {dst}")
                 shutil.copy(src, dst)
             
                 shifting += 1
@@ -137,12 +142,14 @@ def parse_args():
         help="output directory where to save results")
     parser.add_argument('--min-n-shards', default=1, type=int,
         help="the minimum number of shards to create (smaller data may go into less shards)")
+    parser.add_argument('--max-n-shards', default=10, type=int,
+        help="the maximum number of shards to create (smaller data may go into less shards)")
     parser.add_argument('--no-replicate', default=False, action='store_true',
         help="do not replicate small datasets into other higher-numbered shards")
     args, rest = parser.parse_known_args()
     args.rest = rest 
     
-    args.config = utils.parse_configs(args.configs, args.outdir)
+    args.config = utils.parse_configs(args.configs, None) #don't copy configs over
     return args
 
 if __name__ == '__main__':
