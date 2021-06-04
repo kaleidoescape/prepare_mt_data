@@ -59,7 +59,7 @@ def shard_data_n_lines(fp, outdir, n_lines=100000, max_n_shards=10, length=None)
     n_shards = (length // n_lines)
     if n_shards == 0:
         n_shards = 1
-    if n_shards > max_n_shards:
+    if max_n_shards and n_shards > max_n_shards:
         n_shards = max_n_shards
     n_shards = shard_data_n_shards(fp, outdir, n_shards=n_shards, length=length)
     return n_shards
@@ -67,8 +67,10 @@ def shard_data_n_lines(fp, outdir, n_lines=100000, max_n_shards=10, length=None)
 def main(pconfig, outdir, min_n_shards=1, max_n_shards=10, replicate=True):
     r"""
     Split data into shard folders in the outdir. The smallest dataset will be
-    split into min_n_shards. Bigger datasets will be split so each of their 
-    shards has at most the number of lines of the small dataset / min_n_shards.
+    split into min_n_shards. Bigger datasets will be split into max_n_shards.
+    If max_n_shards is None, bigger datasets will be split so each of their 
+    shards has the number of lines of the small dataset / min_n_shards,
+    plus a few extra from any remainder spread around.
     
     If replicate=True, smaller datasets will be replicated into the shards that
     they're missing from (their shards will be looped over for replication, e.g.
