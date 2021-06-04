@@ -51,8 +51,8 @@ def shard_data_n_shards(fp, outdir, n_shards=1, length=None):
 
 def shard_data_n_lines(fp, outdir, n_lines=100000, max_n_shards=10, length=None):
     r"""
-    Split fp into shards, where each shard has n_lines
-    (except last, small shard, which has the remainder).
+    Split fp into shards, where each shard has n_lines,
+    plus some from the remainder, spread around on top.
     """
     if length is None:
         length = utils.get_file_length(fp)
