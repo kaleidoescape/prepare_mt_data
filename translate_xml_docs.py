@@ -5,8 +5,8 @@ Use a supplied command to invoke a translator subprocess. Any command can be
 used (including piping together more complicated commands), as long as it is 
 passed in to the program as a string.
 
-Example for SentencePiece with Fairseq (not the double quotes around the entire
-command, and the therefore the single quotes used for grep):
+Example for SentencePiece with Fairseq (note the double quotes around the 
+entire command, and the therefore the single quotes used for grep):
 
 CUDA_VISIBLE_DEVICES=4 python translate_xml_docs.py \
     input.xml \
