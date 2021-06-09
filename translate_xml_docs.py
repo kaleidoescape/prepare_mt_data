@@ -8,24 +8,13 @@ passed in to the program as a string.
 Example for SentencePiece with Fairseq (note the double quotes around the 
 entire command, and the therefore the single quotes used for grep):
 
-CUDA_VISIBLE_DEVICES=4 python translate_xml_docs.py \
+CUDA_VISIBLE_DEVICES=0 python translate_xml_docs.py \
     input.xml \
     output.xml \
-    "~/sentencepiece/build/src/spm_encode \
-        --model=$BPEDIR/tmpr_32k/bpe_tmpr_32k.model \
-        --output_format=piece \
-    | fairseq-interactive \
-        $DATADIR/tmpr_32k \
-        --path model_t32tmpr/chkpt/checkpoint_best.pt \
-        --task translation_multi_simple_epoch \
-        --beam 5 --source-lang is --target-lang nb \
-        --fixed-dictionary $DATADIR/tmpr_32k/dict.multi.txt \
-        --lang-dict $DATADIR/lang_list_germanic.txt \
-        --lang-pairs $DATADIR/lang_pairs_germanic.txt \
-        --encoder-langtok tgt \
+    "~/sentencepiece/build/src/spm_encode --model=bpe.model --output_format=piece \
+    | fairseq-interactive data-bin/ --path checkpoint_best.pt --<fairseq params> \
     | grep -P 'D-[0-9]+' | cut -f3 \
-    | $~/sentencepiece/build/src/spm_decode \
-        --model $BPEDIR/tmpr_32k/bpe_tmpr_32k.model"
+    | ~/sentencepiece/build/src/spm_decode --model bpe.model"
 """
 import argparse
 import logging
