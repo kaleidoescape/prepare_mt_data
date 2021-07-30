@@ -6,6 +6,7 @@ A loose collection of scripts for preparing parallel machine translation data.
 
 ```
 pip install -r requirements.txt
+pip install -e .
 ```
 
 # Usage
