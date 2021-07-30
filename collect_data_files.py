@@ -18,7 +18,9 @@ def collect_data_files(
         exclude: Optional[list]=None, 
         require: Optional[list]=None, 
         ordered: Optional[str]=None, #{None, forward, backward}
-        unique: Optional[bool]=True
+        unique: Optional[bool]=True,
+        mono: Optional[bool]=True,
+        skip: Optional[list]=None, #e.g. ['xx2yy', 'yy2zz']
     ):
     assert ordered in [None, False, 'forward', 'backward']
 
@@ -41,12 +43,15 @@ def collect_data_files(
     data = {}
     seen = set()
     for direction in directions:
+        if skip and '2'.join(direction) in skip:
+            continue
         for base in bases:
             src_lang = direction[0]
             tgt_lang = direction[1]
-            src_fp = os.path.join(base + f'.{src_lang}')
-            tgt_fp = os.path.join(base + f'.{tgt_lang}')
 
+            src_fp = base + f'.{src_lang}'
+            tgt_fp = base + f'.{tgt_lang}'
+            
             if ordered == 'forward':
                 if langs.index(src_lang) > langs.index(tgt_lang):
                     continue
@@ -75,14 +80,38 @@ def collect_data_files(
                         break
             if not (exclude_ok and require_ok):
                 continue
+            
+            name = os.path.relpath(base, direc)
+            name = name.replace('/', '-')
 
-            if os.path.exists(src_fp) and os.path.exists(tgt_fp):
-                #try to simplify the name for reader's ease
-                dataset_name, ext = os.path.splitext(base)
-                name = os.path.relpath(dataset_name, direc)
-                name = name.replace('/', '-')
+            if mono:
+                if os.path.exists(src_fp):
+                    k = f"{src_lang}_mono_{name}"
+                    src_name = os.path.basename(src_fp)
+                    if src_name in seen:
+                        continue
+                    seen.add(src_name)
+                    data[k] = {
+                        'src_lang': src_lang,
+                        'tgt_lang': '',
+                        'src': src_fp,
+                        'tgt': '' 
+                    }
+                if os.path.exists(tgt_fp):
+                    k = f"{tgt_lang}_mono_{name}"
+                    tgt_name = os.path.basename(tgt_fp)
+                    if tgt_name in seen:
+                        continue
+                    seen.add(tgt_name)
+                    data[k] = {
+                        'src_lang': tgt_lang,
+                        'tgt_lang': '',
+                        'src': tgt_fp,
+                        'tgt': '' 
+                    }
+
+            elif os.path.exists(src_fp) and os.path.exists(tgt_fp):
                 k = f"{src_lang}2{tgt_lang}_{name}"
-                #logger.info(f"Adding: {src_fp} {k}")
 
                 src_name = os.path.basename(src_fp)
                 tgt_name = os.path.basename(tgt_fp)
@@ -97,6 +126,8 @@ def collect_data_files(
                     'src': src_fp,
                     'tgt': tgt_fp
                 }
+    if not data:
+        logger.warning("No files found, config is empty!")
     return data
 
 def main(
@@ -108,7 +139,9 @@ def main(
         exclude=None, 
         require=None, 
         ordered=None, 
-        unique=True
+        unique=True,
+        mono=False,
+        skip=None,
     ):
     r"""
     Args:
@@ -123,6 +156,8 @@ def main(
             (None means we add both directions into the config file)
         unique: don't use the same base filename twice, to prevent creating
             mirrored backwards directions when the file has already been used
+        mono: search for monolingual data (also ending in lang suffix)
+        skip: list of language directions to skip in the form ['xx2yy']
 
     """
     data = {'data': 
@@ -135,6 +170,8 @@ def main(
             require=require, 
             ordered=ordered,
             unique=unique,
+            mono=mono,
+            skip=skip,
         )
     }
     with open(outfp, 'w', encoding='utf-8') as fh:
