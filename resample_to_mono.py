@@ -13,7 +13,7 @@ import numpy as np
 import utils
 
 #be explicit, so that logging occurs even if this is run as main
-logger = utils.setup_logger('resample_for_bpe')
+logger = utils.setup_logger('resample_to_mono')
 logger.setLevel(logging.INFO)
 
 def temperature_sampling(sizes, temperature=5):
