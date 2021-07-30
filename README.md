@@ -2,7 +2,9 @@
 
 A loose collection of scripts for preparing parallel machine translation data.
 
-# Requirements
+# Installation
+
+Requires python3.
 
 ```
 pip install -r requirements.txt
