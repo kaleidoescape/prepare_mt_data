@@ -53,7 +53,7 @@ def update_dict_recursively(d, u):
             d[k] = v
     return d
 
-def parse_configs(configs, outdir=None):
+def parse_configs(configs, outdir=None, parser=ConfigArgs):
     pconfig = {}
     for config in configs:
         if outdir:
@@ -69,7 +69,7 @@ def parse_configs(configs, outdir=None):
         with open(os.path.join(outdir, 'config.last_input.yml'), 'w', encoding='utf-8') as outfile:
             yaml.dump(pconfig, outfile)
 
-    config = ConfigArgs.parse_obj(pconfig).dict()
+    config = parser.parse_obj(pconfig).dict()
     return config
 
 def get_file_length(filepath):
@@ -134,3 +134,20 @@ def setup_logger(
             logger.addHandler(stream_handler)
 
     return logger
+
+def fix_broken_chars(fp: str, outfp: str) -> str:
+    r"""
+    Remove the null character, zero width space, and lonely carriage return.
+    This is used to fix the line endings so parallel files actually align.
+    """
+    cmd = f'sed -e "s/\r//g" {fp} > {outfp}.tmp' #from windows line endings
+    subprocess.check_output(cmd, shell=True)
+    with open(outfp + '.tmp', 'r', encoding='utf-8') as infile, \
+         open(outfp, 'w', encoding='utf-8') as outfile:
+        for line in infile:
+            line = line.replace('\x00', '') #null byte
+            line = line.replace('\u200c', '') #zero width non joiner
+            line = line.replace('\ufeff', '') #zero width non breaking space
+            outfile.write(line)
+    os.remove(outfp + '.tmp')
+    return outfp

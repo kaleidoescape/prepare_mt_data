@@ -10,11 +10,135 @@ from typing import *
 import yaml
 import numpy as np
 
+from tqdm import tqdm
+from pydantic import BaseModel, validator
+
 import utils
 
 #be explicit, so that logging occurs even if this is run as main
-logger = utils.setup_logger('resample_sinkhorn')
+logger = utils.setup_logger('resample_parallel')
 logger.setLevel(logging.INFO)
+
+SAMPLING_METHODS = [
+    'uniform',
+    'temperature',
+    'sinkhorn'
+]
+
+class DatasetArg(BaseModel):
+    r"""A data set field from the config file."""
+    src_lang: str
+    tgt_lang: str
+    src: str 
+    tgt: str 
+    weight: Optional[float]=1.0
+
+    @validator('src', 'tgt')
+    def valid_file(cls, data):
+        if data and not os.path.exists(data): 
+            raise FileNotFoundError(f"File not found: {data}")
+        #if data and os.stat(data).st_size == 0:
+        #    raise OSError(f"File empty: {data}")
+        return data
+
+class ConfigArgs(BaseModel):
+    r"""The fields from the config file."""
+    data: Dict[str, DatasetArg]
+    args: Optional[dict]={}
+
+
+def clean_line(line):
+    line = line.replace('\r', '') #windows line ending carraige return
+    line = line.replace('\x00', '') #null byte
+    line = line.replace('\u200c', '') #zero width non joiner
+    line = line.replace('\ufeff', '') #zero width non breaking space
+    return line
+
+def uniform_sampling_distribution(
+        langs, metadata
+    ):
+    r"""
+    Create a uniform distribution over the languages.
+
+    Return an ordered lsit of the sampling distrib for langs and the ordered
+    list of langs.
+    """
+    slangs = sorted(langs)
+    distrib = [1 / len(slangs)]*len(slangs)
+    return distrib, slangs
+
+def uniform_sampling(
+        langs, metadata
+    ):
+    r"""
+    Return an updated metadata dict with the probability assigned to the
+    dataset based on its target language. Probability is uniform over langs.
+    """
+    probs, langs = uniform_sampling_distribution(langs, metadata)
+
+    updated_metadata = [] 
+    for meta in metadata:
+        src_lang, tgt_lang, sizes = meta['src_lang'], meta['tgt_lang'], meta['size']
+        if src_lang not in langs or tgt_lang not in langs:
+            logger.warning(f"Dataset {meta['name']} langs {src_lang}2{tgt_lang} do not exist in langs {langs}")
+            prob = 0 
+        else:
+            src_idx, tgt_idx = langs.index(src_lang), langs.index(tgt_lang)
+            prob = probs[tgt_idx] #sample based on the target language
+
+        new_meta = meta.copy() #copy to avoid overwriting original dicts
+        new_meta['prob'] = prob
+        updated_metadata.append(new_meta)
+
+    return updated_metadata
+
+def temperature_sampling_distribution(
+        langs, metadata, tmpr=1.0
+    ):
+    r"""
+    Convert dataset sizes into a distribution which takes into account the
+    prevalence of the source/target languages in the data.
+    
+    Return an ordered list of the sampling distrib for langs and the ordered
+    list of langs.
+    """
+    slangs = sorted(langs)
+    sizes = [0]*len(slangs)
+    for i, meta in enumerate(metadata):
+        src_lang, tgt_lang, size = meta['src_lang'], meta['tgt_lang'], meta['size']
+        src_idx, tgt_idx = slangs.index(src_lang), slangs.index(tgt_lang)
+        sizes[slangs.index(src_lang)] += size
+        sizes[slangs.index(tgt_lang)] += size
+
+    sizes = np.asarray(sizes)
+    distrib = sizes ** (1 / tmpr)
+    distrib = distrib / sum(distrib)
+    return distrib, slangs
+
+def temperature_sampling(
+        langs, metadata, tmpr=1.0
+    ):
+    r"""
+    Return an updated metadata dict with the probability assigned to the
+    dataset based on its target language.
+    """
+    probs, langs = temperature_sampling_distribution(langs, metadata, tmpr)
+
+    updated_metadata = [] 
+    for meta in metadata:
+        src_lang, tgt_lang, sizes = meta['src_lang'], meta['tgt_lang'], meta['size']
+        if src_lang not in langs or tgt_lang not in langs:
+            logger.warning(f"Dataset {meta['name']} langs {src_lang}2{tgt_lang} do not exist in langs {langs}")
+            prob = 0 
+        else:
+            src_idx, tgt_idx = langs.index(src_lang), langs.index(tgt_lang)
+            prob = probs[tgt_idx] #sample based on the target language
+
+        new_meta = meta.copy() #copy to avoid overwriting original dicts
+        new_meta['prob'] = prob
+        updated_metadata.append(new_meta)
+
+    return updated_metadata
 
 def sinkhorn_temperature_sampling_distribution(
         langs, metadata, tmpr=1.0
@@ -25,7 +149,10 @@ def sinkhorn_temperature_sampling_distribution(
     availability of a particular lang alone across the pairs. We use the
     Sinkhorn-Knopp algorithm to convert a matrix of lang pair counts into 
     a doubly stochastic matrix, which is then converted into the temperature 
-    sampled probabilities. 
+    sampled probabilities.
+
+    Return a matrix for the sampling distrib of lang pairs and the ordered
+    list of langs that represent the two axes of the matrix.
 
     Motivation (section 3.4): https://arxiv.org/abs/2010.11125
     Sinkhorn-Knopp paper: http://msp.org/pjm/1967/21-2/pjm-v21-n2-p14-s.pdf
@@ -84,10 +211,9 @@ def sinkhorn_temperature_sampling(
         langs, metadata, tmpr=1.0
     ):
     r"""
-    Return a tuple of sampling ratios across the datasets, and sampling ratios
-    across the language pairs in all the datasets (will be identical only when
-    the datasets represent unique language directions). Datasets with langs
-    never used for translating into or out of will get a ratio of 0. 
+    Return an updated metadata dict with a probability assigned to each 
+    dataset given its language pairs. Datasets with langs never used for 
+    either translating into or translating out of will get a prob of 0.
     """
     probs, langs = sinkhorn_temperature_sampling_distribution(langs, metadata, tmpr)
 
@@ -99,21 +225,22 @@ def sinkhorn_temperature_sampling(
             prob = 0 
         else:
             src_idx, tgt_idx = langs.index(src_lang), langs.index(tgt_lang)
-            prob = probs[src_idx, tgt_idx]
+            prob = probs[src_idx, tgt_idx] #sample based on the language pair
+
         new_meta = meta.copy() #copy to avoid overwriting original dicts
         new_meta['prob'] = prob
         updated_metadata.append(new_meta)
 
-    return probs, updated_metadata
+    return updated_metadata
 
 def main(
         pconfig: str,
         outdir: str,
         n: int,
+        sampling_method: Optional[str]='sinkhorn', 
         temperature: Optional[float]=5.0,
-        dataset_sampling_method: Optional[str]='uniform', 
-        dataset_temperature: Optional[float]=5.0,
-        dry_run=False
+        add_tag=False,
+        dry_run=False,
     ):
     r"""
     Sample n data points from the data files in the pconfig 'data' 
@@ -133,18 +260,28 @@ def main(
         langs.add(tgt_lang)
 
         length = utils.get_file_length(src_data)
+        weight = 1.0
+        if 'weight' in pconfig['data'][k]:
+            weight = pconfig['data'][k]['weight']
+
         pconfig['data'][k]['size'] = length
         pconfig['data'][k]['name'] = k
+        pconfig['data'][k]['weight'] = weight
+        logger.info(f"{k} {weight}")
         meta.append(pconfig['data'][k])
         dataset_names.append(k)
         dataset_lengths[k] = length
 
-    #do sinkhorn temperature sampling by language pair, then get the 
-    #probabilities for each of the datasets, converted into a distribution
-    #over the datasets
+    #sample by lang or lang pair, then get the probs for each of the
+    #datasets, converted into a distribution over the datasets
     sorted_langs = sorted(langs)
-    probs, new_meta = sinkhorn_temperature_sampling(langs, meta, temperature)
-    weighted = np.asarray([d['size']*d['prob'] for d in new_meta])
+    if sampling_method == 'sinkhorn':
+        new_meta = sinkhorn_temperature_sampling(langs, meta, temperature)
+    elif sampling_method == 'temperature':
+        new_meta = temperature_sampling(langs, meta, temperature)
+    elif sampling_method == 'uniform':
+        new_meta = uniform_sampling(langs, meta)
+    weighted = np.asarray([d['prob']*d['weight'] for d in new_meta])
     dataset_probs = weighted / sum(weighted)
     logger.info(f"Resampled probs:\n{dict(list(zip(dataset_names, dataset_probs)))}")
 
@@ -159,10 +296,11 @@ def main(
 
         os.makedirs(outdir, exist_ok=True)
 
+        #include i in case of name collision when a file can be both src & tgt
         lang_out_fhs = {
             dataset_names[i]: [
-                open(os.path.join(outdir, os.path.basename(d['src'])), 'w', encoding='utf-8'),
-                open(os.path.join(outdir, os.path.basename(d['tgt'])), 'w', encoding='utf-8'),
+                open(os.path.join(outdir, f"{i}.{os.path.basename(d['src'])}"), 'w', encoding='utf-8'),
+                open(os.path.join(outdir, f"{i}.{os.path.basename(d['tgt'])}"), 'w', encoding='utf-8'),
             ]
             for i, d in enumerate(new_meta)
         }
@@ -170,34 +308,43 @@ def main(
     #sample one sentence at a time from the datasets
     final_counts = {k:0 for k in dataset_names}
     read_lines = {k:0 for k in dataset_names}
-    for i, lang_idx in enumerate(range(n)):
+    c = 0
+    pbar = tqdm(total=n)
+    while c < n:
 
         #sample from dataset distribution for a particular dataset to use
         dataset_idx = np.argmax(np.random.multinomial(1, dataset_probs, 1)[0])
         dataset = dataset_names[dataset_idx]
-        final_counts[dataset] += 1
 
         if dry_run: #don't try to write to files if this isn't a real run
             continue
 
         #go around the dataset in a circle when upsampling
         read_lines[dataset] += 1
-        if read_lines[dataset] == dataset_lengths[dataset]:
+        if read_lines[dataset] == dataset_lengths[dataset]-1:
             dataset_fhs[dataset][0].seek(0)
             dataset_fhs[dataset][1].seek(0)
             read_lines[dataset] = 0
 
-        #the outputs could be a bit short if we run into these errors and
-        #note that errors could point to a deeper problem with line endings
         try:
             src_line = dataset_fhs[dataset][0].readline()
             tgt_line = dataset_fhs[dataset][1].readline()
         except UnicodeDecodeError as e:
+            #NOTE: errors could point to a deeper problem with line endings
             logger.warning(f"UnicodeDecodeError from {dataset} (line {read_lines[dataset]}): {line}")
             continue
-
-        lang_out_fhs[dataset][0].write(src_line)
-        lang_out_fhs[dataset][1].write(src_line)
+        else:
+            src_line = clean_line(src_line).strip()
+            tgt_line = clean_line(tgt_line).strip()
+            if add_tag:
+                src_line = f"<2{new_meta[dataset_idx]['tgt_lang']}> {src_line}"
+            if src_line and tgt_line:
+                lang_out_fhs[dataset][0].write(src_line + '\n')
+                lang_out_fhs[dataset][1].write(tgt_line + '\n')
+                final_counts[dataset] += 1
+                pbar.update(1)
+                c += 1
+    pbar.close()
 
     #don't forget to close all of the opened files
     if not dry_run:
@@ -232,13 +379,17 @@ def parse_args():
         help="output directory where to save results")
     parser.add_argument('--n', required=True, type=int,
         help="the number of new sentences to sample")
+    parser.add_argument('--sampling', required=True, type=str, choices=SAMPLING_METHODS,
+        help="the type of sampling method to use")
     parser.add_argument('--tmpr', default=5.0, type=float,
-        help="temperature sampling parameter T for sampling over language pairs") 
+        help="temperature sampling parameter T (only used for temperature sampling and sinkhorn temperature sampling)") 
+    parser.add_argument('--tag', default=False, action='store_true',
+        help="add tag like <2xx> to the src side with the tgt lang") 
     parser.add_argument('--dry-run', default=False, action='store_true',
         help="do a dry run to make the calculations for the datasets without writing new files") 
     args = parser.parse_args()
     
-    args.config = utils.parse_configs(args.configs, args.outdir)
+    args.config = utils.parse_configs(args.configs, args.outdir, parser=ConfigArgs)
     return args
 
 if __name__ == '__main__':
@@ -247,7 +398,12 @@ if __name__ == '__main__':
         args.config,
         outdir=args.outdir,
         n=args.n,
+        sampling_method=args.sampling,
         temperature=args.tmpr,
+        add_tag=args.tag,
         dry_run=args.dry_run,
     )
-    logger.info(f"Final counts: {final_counts} (Total: {sum(final_counts.values())})")
+    logger.info(f"Final counts (total {sum(final_counts.values())}):")
+    m = {k.split('_', maxsplit=1)[1]:k for k in final_counts}
+    for k in sorted(m):
+        logger.info(f"{final_counts[m[k]]} {m[k]} {k}")
