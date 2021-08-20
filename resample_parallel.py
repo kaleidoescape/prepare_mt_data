@@ -267,7 +267,6 @@ def main(
         pconfig['data'][k]['size'] = length
         pconfig['data'][k]['name'] = k
         pconfig['data'][k]['weight'] = weight
-        logger.info(f"{k} {weight}")
         meta.append(pconfig['data'][k])
         dataset_names.append(k)
         dataset_lengths[k] = length
@@ -296,11 +295,11 @@ def main(
 
         os.makedirs(outdir, exist_ok=True)
 
-        #include i in case of name collision when a file can be both src & tgt
+        #add i to name in case of collision when a file is amongst srcs & tgts
         lang_out_fhs = {
             dataset_names[i]: [
-                open(os.path.join(outdir, f"{i}.{os.path.basename(d['src'])}"), 'w', encoding='utf-8'),
-                open(os.path.join(outdir, f"{i}.{os.path.basename(d['tgt'])}"), 'w', encoding='utf-8'),
+                open(os.path.join(outdir, f"{i}.{os.path.basename(d['src'])}.INPUT"), 'w', encoding='utf-8'),
+                open(os.path.join(outdir, f"{i}.{os.path.basename(d['tgt'])}.OUTPUT"), 'w', encoding='utf-8'),
             ]
             for i, d in enumerate(new_meta)
         }
@@ -406,4 +405,4 @@ if __name__ == '__main__':
     logger.info(f"Final counts (total {sum(final_counts.values())}):")
     m = {k.split('_', maxsplit=1)[1]:k for k in final_counts}
     for k in sorted(m):
-        logger.info(f"{final_counts[m[k]]} {m[k]} {k}")
+        logger.info(f"{final_counts[m[k]]} {m[k]}")
