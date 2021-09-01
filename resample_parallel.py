@@ -22,7 +22,8 @@ logger.setLevel(logging.INFO)
 SAMPLING_METHODS = [
     'uniform',
     'temperature',
-    'sinkhorn'
+    'sinkhorn',
+    'original'
 ]
 
 class DatasetArg(BaseModel):
@@ -53,6 +54,18 @@ def clean_line(line):
     line = line.replace('\u200c', '') #zero width non joiner
     line = line.replace('\ufeff', '') #zero width non breaking space
     return line
+
+def original_sampling(
+        langs, metadata
+    ):
+    total = sum([meta['size'] for meta in metadata])
+    updated_metadata = []
+    for meta in metadata:
+        new_meta = meta.copy() #copy to avoid overwriting original dicts
+        new_meta['prob'] = meta['size'] / total
+        updated_metadata.append(new_meta)
+
+    return updated_metadata
 
 def uniform_sampling_distribution(
         langs, metadata
@@ -280,6 +293,8 @@ def main(
         new_meta = temperature_sampling(langs, meta, temperature)
     elif sampling_method == 'uniform':
         new_meta = uniform_sampling(langs, meta)
+    elif sampling_method == 'original':
+        new_meta = original_sampling(langs, meta)
     weighted = np.asarray([d['prob']*d['weight'] for d in new_meta])
     dataset_probs = weighted / sum(weighted)
     logger.info(f"Resampled probs:\n{dict(list(zip(dataset_names, dataset_probs)))}")
